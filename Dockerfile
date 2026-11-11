@@ -25,6 +25,5 @@ RUN chmod +x entrypoint.sh \
 
 USER app
 ENV PATH="/home/app/.local/bin:${PATH}"
-VOLUME ["/app/data"]
 EXPOSE 8080
 ENTRYPOINT ["./entrypoint.sh"]
