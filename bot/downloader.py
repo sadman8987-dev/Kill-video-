@@ -149,7 +149,7 @@ def _linkedin_direct_video(url: str) -> MediaInfo:
         except (ValueError, TypeError):
             continue
     if not sources:
-        sources = [html.unescape(value) for value in re.findall(r"https://dms\\.licdn\\.com[^\\\"\\s<]+", page)]
+        sources = [html.unescape(value) for value in re.findall(r"https://dms\.licdn\.com[^\"\s<]+", page)]
     if not sources:
         raise RuntimeError("LinkedIn video was not found. The post may be private or require login.")
     title_match = re.search(r"<meta[^>]+property=[\"']og:title[\"'][^>]+content=[\"']([^\"']+)", page, re.I)
