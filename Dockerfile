@@ -11,7 +11,6 @@ RUN apt-get update \
 # JS runtime required by yt-dlp for some sites (YouTube)
 COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
 
-RUN useradd -m -u 1000 app
 WORKDIR /app
 
 COPY requirements.txt .
@@ -21,9 +20,7 @@ COPY bot ./bot
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh \
     && mkdir -p /app/data /app/downloads \
-    && chown -R app:app /app
-
-USER app
-ENV PATH="/home/app/.local/bin:${PATH}"
+    
+ENV PATH="/root/.local/bin:${PATH}"
 EXPOSE 8080
 ENTRYPOINT ["./entrypoint.sh"]
