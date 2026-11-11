@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import html
+import json
 import logging
+import re
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -131,6 +135,28 @@ def _single(info: dict, url: str) -> MediaInfo:
     )
 
 
+def _linkedin_direct_video(url: str) -> MediaInfo:
+    """Fallback for public LinkedIn posts when yt-dlp cannot extract the video."""
+    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        page = response.read().decode("utf-8", "ignore")
+    sources: list[str] = []
+    for match in re.finditer(r'data-sources="([^"]+)"', page):
+        try:
+            for source in json.loads(html.unescape(match.group(1))):
+                if source.get("src"):
+                    sources.append(source["src"])
+        except (ValueError, TypeError):
+            continue
+    if not sources:
+        sources = [html.unescape(value) for value in re.findall(r"https://dms\\.licdn\\.com[^\\\"\\s<]+", page)]
+    if not sources:
+        raise RuntimeError("LinkedIn video was not found. The post may be private or require login.")
+    title_match = re.search(r"<meta[^>]+property=[\"']og:title[\"'][^>]+content=[\"']([^\"']+)", page, re.I)
+    title = html.unescape(title_match.group(1)) if title_match else "LinkedIn video"
+    direct_url = sources[0].replace("&amp;", "&")
+    return MediaInfo(title=title, url=direct_url, items=[Item(url=direct_url, title=title)], heights=[720], sizes={720: None}, has_video=True)
+
 def _extract(url: str, max_items: int) -> MediaInfo:
     opts = {
         **_base_opts(),
@@ -139,8 +165,14 @@ def _extract(url: str, max_items: int) -> MediaInfo:
         "noplaylist": _is_single_video_url(url),
         "playlistend": max_items,
     }
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception:
+        if "linkedin.com" not in url.lower():
+            raise
+        log.warning("yt-dlp extraction failed for LinkedIn; trying direct video fallback", exc_info=True)
+        return _linkedin_direct_video(url)
     if info.get("_type") == "playlist":
         items = [i for i in (_to_item(e) for e in (info.get("entries") or []) if e) if i]
         if not items:
