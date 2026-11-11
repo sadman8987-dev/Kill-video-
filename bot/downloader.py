@@ -239,22 +239,7 @@ def _extract(url: str, max_items: int) -> MediaInfo:
             is_playlist=True,
             total=int(info.get("playlist_count") or len(items)),
         )
-
-    result = _single(info, url)
-
-    # LinkedIn may expose audio formats to yt-dlp while the actual video
-    # source is embedded in the public post HTML. Try the LinkedIn-only
-    # direct-video fallback when no video stream was detected. If that
-    # fallback is unavailable, preserve the original info so MP3 remains
-    # available. No other extractor/platform is affected.
-    if "linkedin.com" in url.lower() and not result.has_video:
-        try:
-            log.warning("LinkedIn extraction returned no video formats; trying direct video fallback")
-            return _linkedin_direct_video(url)
-        except Exception:
-            log.warning("LinkedIn direct video fallback failed; keeping original audio-only result", exc_info=True)
-
-    return result
+    return _single(info, url)
 
 
 def _extract_single(url: str) -> MediaInfo:
