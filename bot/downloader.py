@@ -1,0 +1,226 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable
+
+import yt_dlp
+from yt_dlp.utils import DownloadCancelled
+
+from .config import settings
+from .formats import estimate_sizes, ladder_from_formats, video_selector
+
+__all__ = ["DownloadCancelled", "Item", "MediaInfo", "DownloadResult", "get_info", "search", "download"]
+
+log = logging.getLogger(__name__)
+
+MEDIA_EXT = {".mp4", ".mp3", ".m4a", ".mkv", ".webm", ".opus", ".ogg", ".mov", ".aac", ".flac", ".wav"}
+IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+@dataclass
+class Item:
+    url: str
+    title: str
+    duration: int | None = None
+    uploader: str | None = None
+    key: str | None = None  # "<extractor>:<id>" used for the file_id cache
+
+
+@dataclass
+class MediaInfo:
+    title: str
+    url: str
+    items: list[Item]
+    is_playlist: bool = False
+    total: int = 1
+    is_live: bool = False
+    duration: int | None = None
+    heights: list[int] = field(default_factory=list)
+    sizes: dict[int, int | None] = field(default_factory=dict)
+    has_video: bool = True
+
+
+@dataclass
+class DownloadResult:
+    path: Path
+    title: str
+    duration: int | None
+    uploader: str | None
+    width: int | None
+    height: int | None
+    size: int
+    thumb_src: Path | None
+
+
+def _base_opts() -> dict:
+    opts: dict = {
+        "quiet": True,
+        "no_warnings": True,
+        "retries": 5,
+        "fragment_retries": 5,
+        "socket_timeout": 30,
+        "concurrent_fragment_downloads": 4,
+        "restrictfilenames": True,
+        "geo_bypass": True,
+    }
+    if settings.cookies_file and Path(settings.cookies_file).is_file():
+        opts["cookiefile"] = settings.cookies_file
+    if settings.proxy:
+        opts["proxy"] = settings.proxy
+    return opts
+
+
+def _is_single_video_url(url: str) -> bool:
+    """A YouTube watch/short link carrying a list= param is treated as ONE video (not the whole mix)."""
+    low = url.lower()
+    return "list=" in low and ("v=" in low or "youtu.be/" in low)
+
+
+def _entry_url(e: dict) -> str | None:
+    url = e.get("url") or e.get("webpage_url")
+    if url and url.startswith("http"):
+        return url
+    if e.get("id") and (e.get("ie_key") or "").lower() == "youtube":
+        return f"https://www.youtube.com/watch?v={e['id']}"
+    return None
+
+
+def _key(info: dict) -> str | None:
+    ext = (info.get("extractor_key") or info.get("ie_key") or "").lower()
+    return f"{ext}:{info['id']}" if ext and info.get("id") else None
+
+
+def _to_item(e: dict) -> Item | None:
+    url = _entry_url(e)
+    if not url:
+        return None
+    dur = e.get("duration")
+    return Item(
+        url=url,
+        title=e.get("title") or "video",
+        duration=int(dur) if dur else None,
+        uploader=e.get("uploader") or e.get("channel"),
+        key=_key(e),
+    )
+
+
+def _single(info: dict, url: str) -> MediaInfo:
+    formats = info.get("formats") or []
+    ladder = ladder_from_formats(formats)
+    has_video = bool(ladder) or bool(info.get("height"))
+    dur = int(info["duration"]) if info.get("duration") else None
+    item = Item(
+        url=info.get("webpage_url") or url,
+        title=info.get("title") or "video",
+        duration=dur,
+        uploader=info.get("uploader") or info.get("channel"),
+        key=_key(info),
+    )
+    return MediaInfo(
+        title=item.title,
+        url=item.url,
+        items=[item],
+        is_live=bool(info.get("is_live")),
+        duration=dur,
+        heights=ladder,
+        sizes=estimate_sizes(formats, ladder),
+        has_video=has_video,
+    )
+
+
+def _extract(url: str, max_items: int) -> MediaInfo:
+    opts = {
+        **_base_opts(),
+        "skip_download": True,
+        "extract_flat": "in_playlist",
+        "noplaylist": _is_single_video_url(url),
+        "playlistend": max_items,
+    }
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+    if info.get("_type") == "playlist":
+        items = [i for i in (_to_item(e) for e in (info.get("entries") or []) if e) if i]
+        if not items:
+            raise ValueError("empty playlist")
+        if len(items) == 1:
+            return _extract_single(items[0].url)
+        return MediaInfo(
+            title=info.get("title") or "playlist",
+            url=url,
+            items=items,
+            is_playlist=True,
+            total=int(info.get("playlist_count") or len(items)),
+        )
+    return _single(info, url)
+
+
+def _extract_single(url: str) -> MediaInfo:
+    with yt_dlp.YoutubeDL({**_base_opts(), "skip_download": True, "noplaylist": True}) as ydl:
+        return _single(ydl.extract_info(url, download=False), url)
+
+
+def _search(query: str, n: int) -> list[Item]:
+    opts = {**_base_opts(), "skip_download": True, "extract_flat": True}
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(f"ytsearch{n}:{query}", download=False)
+    items = [i for i in (_to_item({**e, "ie_key": e.get("ie_key") or "Youtube"}) for e in (info.get("entries") or []) if e) if i]
+    return items
+
+
+def _download(url: str, mode: str, height: int, workdir: Path, hook: Callable[[dict], None]) -> DownloadResult:
+    opts = {
+        **_base_opts(),
+        "noplaylist": True,
+        "outtmpl": str(workdir / "%(id)s.%(ext)s"),
+        "progress_hooks": [hook],
+        "writethumbnail": True,
+    }
+    if mode == "audio":
+        opts["format"] = "bestaudio/best"
+        opts["postprocessors"] = [
+            {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"},
+            {"key": "FFmpegMetadata"},
+        ]
+    else:
+        opts["format"] = video_selector(height)
+        opts["merge_output_format"] = "mp4"
+        opts["postprocessors"] = [{"key": "FFmpegVideoRemuxer", "preferedformat": "mp4"}]
+
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+    if info.get("_type") == "playlist":
+        info = (info.get("entries") or [info])[0]
+
+    files = [p for p in workdir.iterdir() if p.is_file() and p.suffix.lower() in MEDIA_EXT]
+    if not files:
+        raise RuntimeError("no output file produced")
+    wanted = ".mp3" if mode == "audio" else ".mp4"
+    path = next((p for p in files if p.suffix.lower() == wanted), max(files, key=lambda p: p.stat().st_size))
+    thumbs = [p for p in workdir.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_EXT]
+    dur = info.get("duration")
+    return DownloadResult(
+        path=path,
+        title=info.get("title") or "media",
+        duration=int(dur) if dur else None,
+        uploader=info.get("uploader") or info.get("channel"),
+        width=info.get("width"),
+        height=info.get("height"),
+        size=path.stat().st_size,
+        thumb_src=thumbs[0] if thumbs else None,
+    )
+
+
+async def get_info(url: str, max_items: int = 10) -> MediaInfo:
+    return await asyncio.to_thread(_extract, url, max_items)
+
+
+async def search(query: str, n: int = 5) -> list[Item]:
+    return await asyncio.to_thread(_search, query, n)
+
+
+async def download(url: str, mode: str, height: int, workdir: Path, hook: Callable[[dict], None]) -> DownloadResult:
+    workdir.mkdir(parents=True, exist_ok=True)
+    return await asyncio.to_thread(_download, url, mode, height, workdir, hook)
