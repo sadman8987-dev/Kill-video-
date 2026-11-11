@@ -1,0 +1,29 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - bot-data:/app/data        # SQLite database (users, stats, file_id cache)
+    # Optional cookies: create ./cookies.txt, uncomment the next line and set COOKIES_FILE=/app/cookies.txt
+    #   - ./cookies.txt:/app/cookies.txt:ro
+    # Webhook mode only: publish the port behind your reverse proxy
+    # ports: ["8080:8080"]
+
+  # Optional: local Bot API server for files up to 2GB
+  # Run with: docker compose --profile local-api up -d --build
+  # and set LOCAL_API_URL=http://telegram-bot-api:8081 in .env
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    profiles: ["local-api"]
+    restart: unless-stopped
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+      TELEGRAM_LOCAL: "1"
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+
+volumes:
+  bot-data:
+  telegram-bot-api-data:
