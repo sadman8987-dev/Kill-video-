@@ -1,0 +1,111 @@
+from __future__ import annotations
+
+DEFAULT_LANG = "ar"
+LANGS = ("ar", "en")
+
+TEXTS: dict[str, dict[str, str]] = {
+    "ar": {
+        "start": "👋 أهلاً <b>{name}</b>!\n\n🎬 أرسل لي <b>رابط</b> فيديو من يوتيوب، تيك توك، إنستغرام، فيسبوك، X وأكثر من 1000 موقع.\n🔎 أو اكتب <b>اسم</b> الفيديو/الأغنية وسأبحث لك.\n🎵 /mp3 اسم أو رابط ← صوت مباشرة.\n⚙️ /settings للإعدادات.\n\nاستخدم /help للمزيد.",
+        "help": "📖 <b>طريقة الاستخدام</b>\n\n1️⃣ أرسل رابط الفيديو أو اكتب اسمه للبحث.\n2️⃣ اختر الجودة أو MP3.\n3️⃣ استلم الملف.\n\n<b>الأوامر</b>\n/search اسم — بحث في يوتيوب\n/mp3 اسم أو رابط — تحميل صوت مباشرة\n/dl رابط — تحميل (يعمل في المجموعات)\n/settings — اللغة والجودة الافتراضية\n\nℹ️ الحد الأقصى للملف: <b>{limit}</b> (الملفات الأكبر تُقسَّم تلقائياً).\n📃 قوائم التشغيل: أول {pl} عنصر.\n⏱ أقصى مدة: {maxdur}.",
+        "unlimited": "غير محدود",
+        "search_usage": "🔎 اكتب اسم الفيديو أو الأغنية بعد الأمر.\nمثال: <code>/search عمرو دياب</code>",
+        "mp3_usage": "🎵 أرسل رابطاً أو اسماً بعد الأمر.\nمثال: <code>/mp3 عمرو دياب نورت</code>",
+        "dl_usage": "🔗 أرسل رابطاً بعد الأمر.\nمثال: <code>/dl https://...</code>",
+        "searching": "🔎 جاري البحث…",
+        "no_results": "😕 لم أجد نتائج. جرّب كلمات أخرى.",
+        "search_pick": "🔎 نتائج البحث عن <b>{q}</b>:",
+        "analyzing": "🔎 جاري فحص الرابط…",
+        "live": "📡 البث المباشر غير مدعوم.",
+        "too_long": "⏱ الفيديو أطول من الحد المسموح ({max}).",
+        "choose": "اختر الصيغة:",
+        "playlist": "📃 <b>{title}</b>\nقائمة تشغيل ({n} عنصر) — سيتم تحميل أول <b>{m}</b>.\n\nاختر الصيغة:",
+        "pl_video": "🎬 فيديو ({q}p)",
+        "pl_audio": "🎵 MP3",
+        "expired": "⌛ انتهت صلاحية الطلب، أرسل الرابط مرة أخرى.",
+        "busy": "⏳ لديك عملية تحميل جارية، انتظر حتى تنتهي أو اضغط إلغاء.",
+        "queued": "🕒 في قائمة الانتظار…",
+        "downloading": "⬇️ جاري التحميل… {idx}\n<b>{title}</b>\n{bar} {pct}%\n🚀 {speed} · ⏳ {eta}",
+        "processing": "⚙️ جاري المعالجة… {idx}",
+        "splitting": "✂️ الملف أكبر من الحد، جاري تقسيمه إلى أجزاء…",
+        "uploading": "⬆️ جاري الرفع إلى تيليجرام… {idx}",
+        "playlist_done": "✅ تم: {ok} / {n} عنصر.",
+        "cancel": "✖ إلغاء",
+        "cancelled": "🛑 تم إلغاء التحميل.",
+        "failed": "❌ تعذّر التحميل. تأكد أن الرابط صحيح وعام ثم أعد المحاولة.",
+        "err_login": "🔒 هذا المحتوى خاص أو يتطلب تسجيل دخول/تأكيد العمر.",
+        "err_geo": "🌍 هذا المحتوى غير متاح في بلد السيرفر.",
+        "err_unsupported": "🚫 هذا الرابط غير مدعوم.",
+        "err_unavailable": "🗑 الفيديو غير متاح أو تم حذفه.",
+        "err_rate": "🐢 الموقع يحدّ الطلبات حالياً، حاول بعد قليل.",
+        "daily_limit": "📛 وصلت للحد اليومي ({n} تحميل). عد غداً.",
+        "banned": "⛔ تم حظرك من استخدام البوت.",
+        "private": "⛔ هذا البوت خاص.",
+        "force_sub": "📢 للاستخدام يجب الاشتراك في القناة أولاً ثم اضغط «تم الاشتراك».",
+        "join_btn": "📢 اشترك في القناة",
+        "joined_btn": "✅ تم الاشتراك",
+        "not_joined": "❗ لم يتم التحقق من اشتراكك بعد.",
+        "thanks": "✅ شكراً! يمكنك الآن استخدام البوت.",
+        "settings": "⚙️ <b>الإعدادات</b>\n\n🌐 اللغة: <b>{lang}</b>\n🎞 الجودة الافتراضية: <b>{quality}</b>",
+        "quality_ask": "اسألني كل مرة",
+        "saved": "✅ تم الحفظ",
+        "lang_name": "العربية",
+    },
+    "en": {
+        "start": "👋 Hi <b>{name}</b>!\n\n🎬 Send me a <b>link</b> from YouTube, TikTok, Instagram, Facebook, X and 1000+ sites.\n🔎 Or type a video/song <b>name</b> and I'll search for you.\n🎵 /mp3 name or link → audio directly.\n⚙️ /settings for preferences.\n\nUse /help for more.",
+        "help": "📖 <b>How to use</b>\n\n1️⃣ Send a video link or type a name to search.\n2️⃣ Pick a quality or MP3.\n3️⃣ Get your file.\n\n<b>Commands</b>\n/search name — search YouTube\n/mp3 name or link — download audio directly\n/dl link — download (works in groups)\n/settings — language & default quality\n\nℹ️ Max file size: <b>{limit}</b> (bigger files are split automatically).\n📃 Playlists: first {pl} items.\n⏱ Max duration: {maxdur}.",
+        "unlimited": "unlimited",
+        "search_usage": "🔎 Type a video or song name after the command.\nExample: <code>/search daft punk</code>",
+        "mp3_usage": "🎵 Send a link or a name after the command.\nExample: <code>/mp3 daft punk get lucky</code>",
+        "dl_usage": "🔗 Send a link after the command.\nExample: <code>/dl https://...</code>",
+        "searching": "🔎 Searching…",
+        "no_results": "😕 No results. Try different keywords.",
+        "search_pick": "🔎 Results for <b>{q}</b>:",
+        "analyzing": "🔎 Checking the link…",
+        "live": "📡 Live streams are not supported.",
+        "too_long": "⏱ The video is longer than the allowed limit ({max}).",
+        "choose": "Choose a format:",
+        "playlist": "📃 <b>{title}</b>\nPlaylist ({n} items) — the first <b>{m}</b> will be downloaded.\n\nChoose a format:",
+        "pl_video": "🎬 Video ({q}p)",
+        "pl_audio": "🎵 MP3",
+        "expired": "⌛ Request expired, please send the link again.",
+        "busy": "⏳ You already have a download in progress. Wait or press Cancel.",
+        "queued": "🕒 Queued…",
+        "downloading": "⬇️ Downloading… {idx}\n<b>{title}</b>\n{bar} {pct}%\n🚀 {speed} · ⏳ {eta}",
+        "processing": "⚙️ Processing… {idx}",
+        "splitting": "✂️ File exceeds the limit, splitting into parts…",
+        "uploading": "⬆️ Uploading to Telegram… {idx}",
+        "playlist_done": "✅ Done: {ok} / {n} items.",
+        "cancel": "✖ Cancel",
+        "cancelled": "🛑 Download cancelled.",
+        "failed": "❌ Download failed. Make sure the link is valid and public, then try again.",
+        "err_login": "🔒 This content is private or requires login / age confirmation.",
+        "err_geo": "🌍 This content is not available in the server's country.",
+        "err_unsupported": "🚫 This link is not supported.",
+        "err_unavailable": "🗑 The video is unavailable or was removed.",
+        "err_rate": "🐢 The site is rate-limiting requests right now, try again shortly.",
+        "daily_limit": "📛 You reached the daily limit ({n} downloads). Come back tomorrow.",
+        "banned": "⛔ You are banned from using this bot.",
+        "private": "⛔ This bot is private.",
+        "force_sub": "📢 Please join the channel first, then press “I joined”.",
+        "join_btn": "📢 Join the channel",
+        "joined_btn": "✅ I joined",
+        "not_joined": "❗ Your subscription is not verified yet.",
+        "thanks": "✅ Thanks! You can use the bot now.",
+        "settings": "⚙️ <b>Settings</b>\n\n🌐 Language: <b>{lang}</b>\n🎞 Default quality: <b>{quality}</b>",
+        "quality_ask": "Ask every time",
+        "saved": "✅ Saved",
+        "lang_name": "English",
+    },
+}
+
+
+def normalize_lang(code: str | None) -> str:
+    if not code:
+        return DEFAULT_LANG
+    return "ar" if code.lower().startswith("ar") else "en"
+
+
+def tr(lang: str, key: str, **kwargs: object) -> str:
+    table = TEXTS.get(lang) or TEXTS[DEFAULT_LANG]
+    text = table.get(key) or TEXTS["en"][key]
+    return text.format(**kwargs) if kwargs else text
