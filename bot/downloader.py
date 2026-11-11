@@ -1,11 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import html
-import json
 import logging
-import re
-import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -135,81 +131,6 @@ def _single(info: dict, url: str) -> MediaInfo:
     )
 
 
-def _linkedin_direct_video(url: str) -> MediaInfo:
-    """Fallback for publicly accessible LinkedIn posts, optionally using configured cookies/proxy."""
-    import http.cookiejar
-    from urllib.parse import urlparse
-
-    handlers = []
-    if settings.proxy:
-        handlers.append(urllib.request.ProxyHandler({
-            "http": settings.proxy,
-            "https": settings.proxy,
-        }))
-
-    cookie_file = settings.cookies_file
-    if cookie_file and Path(cookie_file).is_file():
-        jar = http.cookiejar.MozillaCookieJar()
-        try:
-            jar.load(cookie_file, ignore_discard=True, ignore_expires=True)
-            handlers.append(urllib.request.HTTPCookieProcessor(jar))
-        except (OSError, http.cookiejar.LoadError):
-            log.warning("Could not load configured cookies file for LinkedIn fallback")
-
-    opener = urllib.request.build_opener(*handlers)
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-    }
-    request = urllib.request.Request(url, headers=headers)
-    with opener.open(request, timeout=30) as response:
-        page = response.read().decode("utf-8", "ignore")
-        final_url = response.geturl()
-
-    sources: list[str] = []
-    for match in re.finditer(r'data-sources="([^"]+)"', page):
-        try:
-            payload = json.loads(html.unescape(match.group(1)))
-            for source in payload if isinstance(payload, list) else []:
-                src = source.get("src") if isinstance(source, dict) else None
-                if src and src.startswith("https://"):
-                    sources.append(src)
-        except (ValueError, TypeError):
-            continue
-
-    # Some public LinkedIn pages expose the media URL directly in page metadata.
-    if not sources:
-        candidates = re.findall(
-            r'https?:\\?/\\?/dms\\.licdn\\.com[^"\\s<>]+',
-            page,
-        )
-        sources = [html.unescape(value).replace("\\/", "/").replace("&amp;", "&") for value in candidates]
-
-    # De-duplicate while preserving source order.
-    sources = list(dict.fromkeys(sources))
-    if not sources:
-        raise RuntimeError(
-            "LinkedIn video was not found. The post may be private, "
-            "restricted, or require valid login cookies."
-        )
-
-    title_match = re.search(
-        r'<meta[^>]+(?:property|name)=["\'](?:og:title|twitter:title)["\'][^>]+content=["\']([^"\']+)',
-        page,
-        re.I,
-    )
-    title = html.unescape(title_match.group(1)) if title_match else "LinkedIn video"
-    direct_url = sources[0].replace("&amp;", "&")
-    return MediaInfo(
-        title=title,
-        url=final_url or url,
-        items=[Item(url=direct_url, title=title)],
-        heights=[720],
-        sizes={720: None},
-        has_video=True,
-    )
-
 def _extract(url: str, max_items: int) -> MediaInfo:
     opts = {
         **_base_opts(),
@@ -218,14 +139,8 @@ def _extract(url: str, max_items: int) -> MediaInfo:
         "noplaylist": _is_single_video_url(url),
         "playlistend": max_items,
     }
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-    except Exception:
-        if "linkedin.com" not in url.lower():
-            raise
-        log.warning("yt-dlp extraction failed for LinkedIn; trying direct video fallback", exc_info=True)
-        return _linkedin_direct_video(url)
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
     if info.get("_type") == "playlist":
         items = [i for i in (_to_item(e) for e in (info.get("entries") or []) if e) if i]
         if not items:
