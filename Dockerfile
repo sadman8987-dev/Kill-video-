@@ -19,8 +19,8 @@ RUN pip install -r requirements.txt
 COPY bot ./bot
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh \
-    && mkdir -p /app/data /app/downloads \
-    
+    && mkdir -p /app/data /app/downloads
+
 ENV PATH="/root/.local/bin:${PATH}"
 EXPOSE 8080
 ENTRYPOINT ["./entrypoint.sh"]
